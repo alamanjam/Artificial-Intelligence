@@ -1,0 +1,63 @@
+
+def backtracking_search(csp, mcv=False, lcv=False, fc=False, mac=False):
+    """Set up to do recursive backtracking search. Allow the following options:
+    mcv - If true, use Most Constrained Variable Heuristic
+    lcv - If true, use Least Constraining Value Heuristic
+    fc  - If true, use Forward Checking
+    mac - If true, use Maintaining Arc Consistency.              [Fig. 5.3]
+    >>> backtracking_search(australia)
+    {'WA': 'B', 'Q': 'B', 'T': 'B', 'V': 'B', 'SA': 'G', 'NT': 'R', 'NSW': 'R'}
+    """
+    if fc or mac:
+        csp.curr_domains, csp.pruned = {}, {}
+        for v in csp.vars:
+            csp.curr_domains[v] = csp.domains[v][:]
+            csp.pruned[v] = []
+    update(csp, mcv=mcv, lcv=lcv, fc=fc, mac=mac)
+    return recursive_backtracking({}, csp)
+
+def recursive_backtracking(assignment, csp):
+    """Search for a consistent assignment for the csp.
+    Each recursive call chooses a variable, and considers values for it."""
+    if len(assignment) == len(csp.vars):
+        return assignment
+    var = select_unassigned_variable(assignment, csp)
+    for val in order_domain_values(var, assignment, csp):
+        if csp.fc or csp.nconflicts(var, val, assignment) == 0:
+            csp.assign(var, val, assignment)
+            result = recursive_backtracking(assignment, csp)
+            if result is not None:
+                return result
+        csp.unassign(var, assignment)
+    return None
+
+def select_unassigned_variable(assignment, csp):
+    "Select the variable to work on next.  Find"
+    if csp.mcv: # Most Constrained Variable
+        unassigned = [v for v in csp.vars if v not in assignment]
+        return argmin_random_tie(unassigned,
+                     lambda var: -num_legal_values(csp, var, assignment))
+    else: # First unassigned variable
+        for v in csp.vars:
+            if v not in assignment:
+                return v
+
+def order_domain_values(var, assignment, csp):
+    "Decide what order to consider the domain variables."
+    if csp.curr_domains:
+        domain = csp.curr_domains[var]
+    else:
+        domain = csp.domains[var][:]
+    if csp.lcv:
+        # If LCV is specified, consider values with fewer conflicts first
+        key = lambda val: csp.nconflicts(var, val, assignment)
+        domain.sort(lambda(x,y): cmp(key(x), key(y)))
+    while domain:
+        yield domain.pop()
+
+def num_legal_values(csp, var, assignment):
+    if csp.curr_domains:
+        return len(csp.curr_domains[var])
+    else:
+        return count_if(lambda val: csp.nconflicts(var, val, assignment) == 0,
+                        csp.domains[var])
